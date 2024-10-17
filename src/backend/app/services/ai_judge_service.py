@@ -1,1 +1,1 @@
-from src.backend.app.models.rubric import rubric
+from app.services.ai_judge.rubric import Rubric
