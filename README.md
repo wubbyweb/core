@@ -27,11 +27,11 @@ The AI Hacker League is governed by a board of directors and several key committ
 - **Outreach Committee**: Focuses on community engagement, partnerships, and marketing efforts.
 - **Education Committee**: Develops learning resources and mentorship programs.
 
-For detailed information about our governance structure, please refer to the [governance documents](aihl/docs/governance/readme.md) located in the `aihl/docs/governance/` directory.
+For detailed information about our governance structure, please refer to the [governance documents](docs/governance/readme.md) located in the `docs/governance/` directory.
 
 ### Team
 
-To learn more about the dedicated individuals leading the AI Hacker League, please visit our [Team Page](aihl/docs/governance/team.md).
+To learn more about the dedicated individuals leading the AI Hacker League, please visit our [Team Page](docs/governance/team.md).
 
 ### Founding Charter
 
@@ -57,9 +57,9 @@ Visit our website or contact us at info@aihackerleague.org to learn more about p
 
 For more detailed information about the AI Hacker League, please refer to the following documents:
 
-- [AI Hacker League Documentation Overview](aihl/docs/readme.md)
-- [Governance Documents](aihl/docs/governance/readme.md)
-- [Code of Conduct](aihl/docs/governance/code_of_conduct.md)
-- [Participation Guidelines](aihl/docs/participation_guidelines.md)
+- [AI Hacker League Documentation Overview](docs/readme.md)
+- [Governance Documents](docs/governance/readme.md)
+- [Code of Conduct](docs/governance/code_of_conduct.md)
+- [Participation Guidelines](docs/participation_guidelines.md)
 
 Join us in shaping the future of AI through collaboration, innovation, and ethical practices!
