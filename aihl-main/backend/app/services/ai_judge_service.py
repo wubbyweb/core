@@ -3,8 +3,8 @@ from IPython.display import display, Markdown
 from lionagi import Branch, iModel
 from aiocache import cached
 from app.services.ai_judge.rubric import Rubric
-from ai_judge.form import CodeAnalysisForm
-from config import judge_model_config
+from app.services.ai_judge.form import CodeAnalysisForm
+from app.config import judge_model_config
 
 
 @cached(ttl=3600)
@@ -35,8 +35,8 @@ async def judge_code(
     
     
 async def main():
-    from ai_judge.code_quality import code_quality_rubric
-    from ai_judge.sample_codes import code1
+    from app.services.ai_judge.code_quality import code_quality_rubric
+    from app.services.ai_judge.sample_codes import code1
     
     return await judge_code(
         code_submission=code1,
