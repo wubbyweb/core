@@ -2,7 +2,7 @@ import asyncio
 from IPython.display import display, Markdown
 from lionagi import Branch, iModel
 from aiocache import cached
-from ai_judge.rubric import Rubric
+from app.services.ai_judge.rubric import Rubric
 from ai_judge.form import CodeAnalysisForm
 from config import judge_model_config
 
