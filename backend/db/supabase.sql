@@ -24,6 +24,80 @@ CREATE POLICY "Allow public insert for registration" ON users
 
 -- Leaderboard statement and functions
 
+
+-- This is typically created automatically by Supabase Auth
+create table public.users (
+    id uuid references auth.users primary key, -- Links to Supabase Auth
+    username text unique not null,
+    created_at timestamp with time zone default timezone('utc'::text, now())
+    -- other user fields...
+);
+
+-- Score history table
+create table public.score_history (
+    id uuid default uuid_generate_v4() primary key,
+    challenge_id text not null,
+    user_id uuid references public.users not null,
+    score integer not null,
+    last_updated timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Function to get latest global scores
+create or replace function get_latest_global_scores()
+returns table (
+    username text,
+    score integer,
+    last_updated timestamp with time zone
+) language sql as $$
+    with latest_scores as (
+        select 
+            user_id,
+            score,
+            last_updated,
+            row_number() over (
+                partition by user_id 
+                order by last_updated desc
+            ) as rn
+        from score_history
+    )
+    select 
+        u.username,
+        ls.score,
+        ls.last_updated
+    from latest_scores ls
+    inner join users u on u.id = ls.user_id
+    where ls.rn = 1
+    order by ls.score desc;
+$$;
+
+-- Function to get latest challenge scores
+create or replace function get_latest_challenge_scores(challenge_id_param text)
+returns table (
+    username text,
+    score integer,
+    last_updated timestamp with time zone
+) language sql as $$
+    with latest_scores as (
+        select 
+            user_id,
+            score,
+            last_updated,
+            row_number() over (
+                partition by user_id 
+                order by last_updated desc
+            ) as rn
+        from score_history
+        where challenge_id = challenge_id_param
+    )
+    select 
+        u.username,
+        ls.score,
+        ls.last_updated
+    from latest_scores ls
+    inner join users u on u.id = ls.user_id
+    where ls.rn = 1
+    order by ls.score desc;
+$$;
 -- Function to get user's rank in a challenge
 create or replace function get_user_challenge_rank(
     challenge_id_param text,
