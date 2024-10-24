@@ -1,4 +1,3 @@
-# backend/app/db/supabase_client.py
 from supabase import create_client, Client
 from typing import Optional, Dict, Any
 from ..core.config import settings
@@ -11,9 +10,9 @@ logger = logging.getLogger(__name__)
 def handle_supabase_errors(func):
     """Decorator to handle Supabase errors"""
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         try:
-            return await func(*args, **kwargs)
+            return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Supabase error in {func.__name__}: {str(e)}")
             raise HTTPException(
@@ -25,7 +24,6 @@ def handle_supabase_errors(func):
 class SupabaseClient:
     _instance = None
     _client: Optional[Client] = None
-    _admin_client: Optional[Client] = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -34,12 +32,11 @@ class SupabaseClient:
 
     def __init__(self):
         if not self._client:
-            self._initialize_clients()
+            self._initialize_client()
 
-    def _initialize_clients(self):
-        """Initialize both regular and admin Supabase clients"""
+    def _initialize_client(self):
+        """Initialize Supabase client"""
         try:
-            # Initialize regular client
             if settings.SUPABASE_URL and settings.SUPABASE_KEY:
                 logger.info("Initializing Supabase client...")
                 self._client = create_client(
@@ -49,38 +46,20 @@ class SupabaseClient:
                 logger.info("Supabase client initialized successfully")
             else:
                 logger.error("Supabase URL or Key is missing")
-
-            # Initialize admin client
-            if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
-                logger.info("Initializing Supabase admin client...")
-                self._admin_client = create_client(
-                    settings.SUPABASE_URL,
-                    settings.SUPABASE_SERVICE_ROLE_KEY
-                )
-                logger.info("Supabase admin client initialized successfully")
-            else:
-                logger.error("Supabase URL or Service Role Key is missing")
-
+                raise Exception("Supabase configuration missing")
         except Exception as e:
-            logger.error(f"Failed to initialize Supabase clients: {str(e)}")
+            logger.error(f"Failed to initialize Supabase client: {str(e)}")
             raise
 
     @property
     def client(self) -> Client:
-        """Get regular Supabase client"""
+        """Get Supabase client"""
         if not self._client:
             raise Exception("Supabase client not initialized")
         return self._client
 
-    @property
-    def admin_client(self) -> Client:
-        """Get admin Supabase client"""
-        if not self._admin_client:
-            raise Exception("Supabase admin client not initialized")
-        return self._admin_client
-
     @handle_supabase_errors
-    async def select(
+    def select(
         self,
         table: str,
         columns: str = "*",
@@ -93,19 +72,19 @@ class SupabaseClient:
             for key, value in filters.items():
                 query = query.eq(key, value)
 
-        return await query.execute()
+        return query.execute()
 
     @handle_supabase_errors
-    async def insert(
+    def insert(
         self,
         table: str,
         data: Dict[str, Any]
     ) -> Dict:
         """Insert data into a table"""
-        return await self.client.from_(table).insert(data).execute()
+        return self.client.from_(table).insert(data).execute()
 
     @handle_supabase_errors
-    async def update(
+    def update(
         self,
         table: str,
         data: Dict[str, Any],
@@ -117,10 +96,10 @@ class SupabaseClient:
         for key, value in filters.items():
             query = query.eq(key, value)
 
-        return await query.execute()
+        return query.execute()
 
     @handle_supabase_errors
-    async def delete(
+    def delete(
         self,
         table: str,
         filters: Dict[str, Any]
@@ -131,25 +110,63 @@ class SupabaseClient:
         for key, value in filters.items():
             query = query.eq(key, value)
 
-        return await query.execute()
+        return query.execute()
 
     @handle_supabase_errors
-    async def rpc(
+    def rpc(
         self,
         function_name: str,
         params: Optional[Dict[str, Any]] = None
     ) -> Dict:
         """Call a Postgres function"""
-        return await self.client.rpc(function_name, params or {}).execute()
+        return self.client.rpc(function_name, params or {}).execute()
 
-    @handle_supabase_errors
-    async def admin_rpc(
-        self,
-        function_name: str,
-        params: Optional[Dict[str, Any]] = None
-    ) -> Dict:
-        """Call a Postgres function with admin privileges"""
-        return await self.admin_client.rpc(function_name, params or {}).execute()
+    # Leaderboard specific methods
+    def get_global_leaderboard(self) -> Dict:
+        """Get global leaderboard data"""
+        return self.rpc('get_global_leaderboard')
+
+    def get_challenge_leaderboard(self, challenge_id: str) -> Dict:
+        """Get challenge-specific leaderboard data"""
+        return self.rpc(
+            'get_challenge_leaderboard',
+            {'challenge_id_param': challenge_id}
+        )
+
+    def get_user_challenge_rank(self, challenge_id: str, user_id: str) -> Dict:
+        """Get user's rank in a specific challenge"""
+        return self.rpc(
+            'get_user_challenge_rank',
+            {
+                'challenge_id_param': challenge_id,
+                'user_id_param': user_id
+            }
+        )
+
+    def update_score(self, challenge_id: str, user_id: str, score: int) -> Dict:
+        """Update or insert a user's score"""
+        data = {
+            'challenge_id': challenge_id,
+            'user_id': user_id,
+            'score': score,
+        }
+        return self.insert('score_history', data)
+
+    def get_user_scores(self, user_id: str) -> Dict:
+        """Get all scores for a specific user"""
+        return self.select(
+            'score_history',
+            '*',
+            {'user_id': user_id}
+        )
+
+    def get_challenge_scores(self, challenge_id: str) -> Dict:
+        """Get all scores for a specific challenge"""
+        return self.select(
+            'score_history',
+            '*',
+            {'challenge_id': challenge_id}
+        )
 
 # Create a singleton instance
 supabase = SupabaseClient()
