@@ -1,35 +1,39 @@
 # backend/app/api/endpoints/leaderboard.py
-from fastapi import APIRouter, Depends
-from typing import List
+from fastapi import APIRouter, HTTPException
+from datetime import datetime
 from ...schemas.leaderboard import (
-    LeaderboardResponse,
+    ScoreUpdateRequest,
     ScoreUpdateResponse,
-    ScoreHistoryCreate,
-    ChallengeCreate
+    LeaderboardResponse,
+    ScoreHistoryCreate
 )
 from ...services.leaderboard_service import LeaderboardService
 
-router = APIRouter()
+router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
-@router.get("/", response_model=LeaderboardResponse)
+@router.get("/global", response_model=LeaderboardResponse)
 async def get_global_leaderboard():
-    """Get global leaderboard data"""
+    """Get global leaderboard rankings"""
     return LeaderboardService.get_global_leaderboard_data()
 
 @router.get("/challenge/{challenge_id}", response_model=LeaderboardResponse)
 async def get_challenge_leaderboard(challenge_id: str):
-    """Get leaderboard for specific challenge"""
-    return LeaderboardService.get_leaderboard_info(challenge_id)
+    """Get leaderboard for a specific challenge"""
+    return LeaderboardService.get_challenge_leaderboard(challenge_id)
 
-@router.post("/challenge/{challenge_id}/score", response_model=ScoreUpdateResponse)
-async def update_challenge_score(
-    challenge_id: str,
-    score_data: ScoreHistoryCreate
-):
-    """Update score for specific challenge"""
-    return LeaderboardService.update_score(challenge_id, score_data)
+@router.post("/score", response_model=ScoreUpdateResponse)
+async def update_score(score_data: ScoreUpdateRequest):
+    """
+    Update a user's score for a specific challenge
 
-@router.post("/challenge", response_model=LeaderboardResponse)
-async def create_challenge(challenge_data: ChallengeCreate):
-    """Create new challenge"""
-    return LeaderboardService.create_challenge(challenge_data)
+    Parameters:
+        score_data: ScoreUpdateRequest containing:
+            - user_id: UUID of the user
+            - challenge_id: ID of the challenge
+            - score: New score value
+    """
+    score_history = ScoreHistoryCreate(
+        **score_data.model_dump(),
+        last_updated=datetime.utcnow()
+    )
+    return LeaderboardService.update_score(score_history)

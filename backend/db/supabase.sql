@@ -23,110 +23,84 @@ CREATE POLICY "Allow public insert for registration" ON users
 
 
 -- Leaderboard statement and functions
+-- Function to get global leaderboard with materialized view
+CREATE MATERIALIZED VIEW global_leaderboard_view AS
+SELECT 
+    u.username,
+    COALESCE(SUM(sh.score), 0) as total_score,
+    MAX(sh.last_updated) as last_updated
+FROM 
+    public.users u
+LEFT JOIN 
+    score_history sh ON u.id = sh.user_id
+GROUP BY 
+    u.username
+ORDER BY 
+    total_score DESC;
 
+-- Create index for better performance
+CREATE INDEX idx_global_leaderboard_score 
+ON global_leaderboard_view (total_score DESC);
 
--- This is typically created automatically by Supabase Auth
-create table public.users (
-    id uuid references auth.users primary key, -- Links to Supabase Auth
-    username text unique not null,
-    created_at timestamp with time zone default timezone('utc'::text, now())
-    -- other user fields...
-);
+-- Function to refresh materialized view
+CREATE OR REPLACE FUNCTION refresh_global_leaderboard()
+RETURNS trigger AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY global_leaderboard_view;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- Score history table
-create table public.score_history (
-    id uuid default uuid_generate_v4() primary key,
-    challenge_id text not null,
-    user_id uuid references public.users not null,
-    score integer not null,
-    last_updated timestamp with time zone default timezone('utc'::text, now()) not null
-);
+-- Trigger to refresh view when scores change
+CREATE TRIGGER refresh_global_leaderboard_trigger
+AFTER INSERT OR UPDATE OR DELETE ON score_history
+FOR EACH STATEMENT
+EXECUTE FUNCTION refresh_global_leaderboard();
 
--- Function to get latest global scores
-create or replace function get_latest_global_scores()
-returns table (
+-- Function to get global leaderboard
+CREATE OR REPLACE FUNCTION get_global_leaderboard()
+RETURNS TABLE (
     username text,
-    score integer,
+    score bigint,
     last_updated timestamp with time zone
-) language sql as $$
-    with latest_scores as (
-        select 
+) LANGUAGE sql STABLE AS $$
+    SELECT 
+        username,
+        total_score as score,
+        last_updated
+    FROM 
+        global_leaderboard_view
+    ORDER BY 
+        total_score DESC;
+$$;
+
+-- Function to get challenge leaderboard
+CREATE OR REPLACE FUNCTION get_challenge_leaderboard(challenge_id_param text)
+RETURNS TABLE (
+    username text,
+    score int,
+    last_updated timestamp with time zone
+) LANGUAGE sql STABLE AS $$
+    WITH latest_scores AS (
+        SELECT DISTINCT ON (user_id)
             user_id,
             score,
-            last_updated,
-            row_number() over (
-                partition by user_id 
-                order by last_updated desc
-            ) as rn
-        from score_history
+            last_updated
+        FROM 
+            score_history
+        WHERE 
+            challenge_id = challenge_id_param
+        ORDER BY 
+            user_id, last_updated DESC
     )
-    select 
+    SELECT 
         u.username,
         ls.score,
         ls.last_updated
-    from latest_scores ls
-    inner join users u on u.id = ls.user_id
-    where ls.rn = 1
-    order by ls.score desc;
-$$;
-
--- Function to get latest challenge scores
-create or replace function get_latest_challenge_scores(challenge_id_param text)
-returns table (
-    username text,
-    score integer,
-    last_updated timestamp with time zone
-) language sql as $$
-    with latest_scores as (
-        select 
-            user_id,
-            score,
-            last_updated,
-            row_number() over (
-                partition by user_id 
-                order by last_updated desc
-            ) as rn
-        from score_history
-        where challenge_id = challenge_id_param
-    )
-    select 
-        u.username,
-        ls.score,
-        ls.last_updated
-    from latest_scores ls
-    inner join users u on u.id = ls.user_id
-    where ls.rn = 1
-    order by ls.score desc;
-$$;
--- Function to get user's rank in a challenge
-create or replace function get_user_challenge_rank(
-    challenge_id_param text,
-    user_id_param uuid
-)
-returns table (
-    rank bigint
-) language sql as $$
-    with latest_scores as (
-        select 
-            user_id,
-            score,
-            last_updated,
-            row_number() over (
-                partition by user_id 
-                order by last_updated desc
-            ) as rn
-        from score_history
-        where challenge_id = challenge_id_param
-    ),
-    ranked_scores as (
-        select 
-            user_id,
-            score,
-            row_number() over (order by score desc) as rank
-        from latest_scores
-        where rn = 1
-    )
-    select rank
-    from ranked_scores
-    where user_id = user_id_param;
+    FROM 
+        latest_scores ls
+    JOIN 
+        users u ON u.id = ls.user_id
+    ORDER BY 
+        ls.score DESC;
 $$;

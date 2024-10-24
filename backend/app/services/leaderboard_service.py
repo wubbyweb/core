@@ -1,33 +1,29 @@
 # backend/app/services/leaderboard_service.py
-from typing import Dict, List, Optional
-from datetime import datetime
-import json
-from redis import Redis
 from fastapi import HTTPException
-from supabase import create_client, Client
-from ..core.config import settings
+from datetime import datetime
+from typing import List, Optional
 from ..schemas.leaderboard import (
-    LeaderboardEntry,
-    GlobalLeaderboard,
-    ChallengeLeaderboard,
     ScoreHistoryCreate,
     ScoreUpdateResponse,
-    LeaderboardResponse
+    LeaderboardResponse,
+    GlobalLeaderboard,
+    ChallengeLeaderboard,
+    LeaderboardEntry
 )
+from ..db.supabase_client import supabase
 
 class LeaderboardService:
     @staticmethod
-    def get_global_leaderboard_data() -> LeaderboardResponse:
-        """Fetch latest global leaderboard data with caching"""
-        cached_data = redis_client.get("global_leaderboard")
-        if cached_data:
-            return LeaderboardResponse(
-                success=True,
-                data=GlobalLeaderboard.model_validate_json(cached_data)
-            )
-
+    async def get_global_leaderboard_data() -> LeaderboardResponse:
+        """Fetch global leaderboard data"""
         try:
-            response = supabase.rpc('get_latest_global_scores').execute()
+            response = await supabase.rpc('get_global_leaderboard').execute()
+
+            if not response.data:
+                return LeaderboardResponse(
+                    success=True,
+                    data=GlobalLeaderboard(entries=[])
+                )
 
             entries = [
                 LeaderboardEntry(
@@ -40,43 +36,31 @@ class LeaderboardService:
             ]
 
             leaderboard_data = GlobalLeaderboard(entries=entries)
+            return LeaderboardResponse(success=True, data=leaderboard_data)
 
-            redis_client.setex(
-                "global_leaderboard",
-                CACHE_EXPIRY,
-                leaderboard_data.model_dump_json()
-            )
-
-            return LeaderboardResponse(
-                success=True,
-                data=leaderboard_data
-            )
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to fetch leaderboard: {str(e)}"
+                detail=f"Failed to fetch global leaderboard: {str(e)}"
             )
 
     @staticmethod
-    def get_leaderboard_info(challenge_id: str) -> LeaderboardResponse:
-        """Get latest leaderboard information for a specific challenge"""
-        cache_key = f"challenge_leaderboard:{challenge_id}"
-
-        cached_data = redis_client.get(cache_key)
-        if cached_data:
-            return LeaderboardResponse(
-                success=True,
-                data=ChallengeLeaderboard.model_validate_json(cached_data)
-            )
-
+    async def get_challenge_leaderboard(challenge_id: str) -> LeaderboardResponse:
+        """Fetch challenge-specific leaderboard data"""
         try:
-            response = supabase.rpc(
-                'get_latest_challenge_scores',
+            response = await supabase.rpc(
+                'get_challenge_leaderboard',
                 {'challenge_id_param': challenge_id}
             ).execute()
 
             if not response.data:
-                raise HTTPException(status_code=404, detail="Challenge not found")
+                return LeaderboardResponse(
+                    success=True,
+                    data=ChallengeLeaderboard(
+                        challenge_id=challenge_id,
+                        scores=[]
+                    )
+                )
 
             scores = [
                 LeaderboardEntry(
@@ -93,16 +77,8 @@ class LeaderboardService:
                 scores=scores
             )
 
-            redis_client.setex(
-                cache_key,
-                CACHE_EXPIRY,
-                leaderboard_data.model_dump_json()
-            )
+            return LeaderboardResponse(success=True, data=leaderboard_data)
 
-            return LeaderboardResponse(
-                success=True,
-                data=leaderboard_data
-            )
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -110,25 +86,23 @@ class LeaderboardService:
             )
 
     @staticmethod
-    def update_score(challenge_id: str, score_data: ScoreHistoryCreate) -> ScoreUpdateResponse:
-        """Insert new score record for a specific challenge"""
+    async def update_score(score_data: ScoreHistoryCreate) -> ScoreUpdateResponse:
+        """Update user's score for a challenge"""
         try:
-            data = score_data.model_dump()
-
-            response = supabase.from_('score_history')\
-                .insert(data)\
-                .execute()
+            # Insert new score record
+            response = await supabase.from_('score_history').insert(
+                score_data.model_dump()
+            ).execute()
 
             if not response.data:
-                raise HTTPException(status_code=404, detail="Failed to update score")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to update score"
+                )
 
-            # Invalidate related caches
-            redis_client.delete(f"challenge_leaderboard:{challenge_id}")
-            redis_client.delete("global_leaderboard")
-
-            # Get updated rank
-            new_rank = LeaderboardService._calculate_rank(
-                challenge_id, 
+            # Calculate new rank
+            new_rank = await LeaderboardService._calculate_rank(
+                score_data.challenge_id,
                 score_data.user_id
             )
 
@@ -138,6 +112,7 @@ class LeaderboardService:
                 score=score_data.score,
                 rank=new_rank
             )
+
         except Exception as e:
             raise HTTPException(
                 status_code=400,
@@ -145,17 +120,20 @@ class LeaderboardService:
             )
 
     @staticmethod
-    def _calculate_rank(challenge_id: str, user_id: str) -> int:
-        """Calculate user's current rank for a specific challenge"""
+    async def _calculate_rank(challenge_id: str, user_id: str) -> Optional[int]:
+        """Calculate user's current rank for a challenge"""
         try:
-            response = supabase.rpc(
+            response = await supabase.rpc(
                 'get_user_challenge_rank',
                 {
                     'challenge_id_param': challenge_id,
-                    'user_id_param': user_id
+                    'user_id_param': str(user_id)
                 }
             ).execute()
 
             return response.data[0]['rank'] if response.data else None
         except Exception:
             return None
+
+# Create a singleton instance
+leaderboard_service = LeaderboardService()
