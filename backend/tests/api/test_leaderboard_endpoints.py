@@ -34,5 +34,13 @@ async def test_leaderboard_endpoints():
         print(f"Status: {response.status_code}")
         print("Response:", response.json())
 
+        # Test score delete endpoint
+        print("\nTesting Score Delete...")
+        user_id = str(uuid.uuid4())  # Generate random UUID for testing
+        date = datetime.utcnow().isoformat()
+        response = await client.delete(f"{BASE_URL}/leaderboard/score", params={"user_id": user_id, "date": date})
+        print(f"Status: {response.status_code}")
+        print("Response:", response.json())
+
 if __name__ == "__main__":
     asyncio.run(test_leaderboard_endpoints())

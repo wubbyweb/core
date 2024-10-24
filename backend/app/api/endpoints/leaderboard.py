@@ -36,3 +36,14 @@ async def update_score(
         return await LeaderboardService.update_score(score_history)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/score")
+async def delete_score(
+    user_id: str,
+    date: datetime
+):
+    """Delete a user's score after a specific date"""
+    try:
+        return await LeaderboardService.delete_score(user_id, date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

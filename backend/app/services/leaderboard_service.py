@@ -193,3 +193,30 @@ class LeaderboardService:
                 status_code=500,
                 detail=f"Failed to fetch challenge scores: {str(e)}"
             )
+
+    @staticmethod
+    async def delete_score(user_id: str, date: datetime) -> dict:
+        """Delete a user's score after a specific date"""
+        try:
+            response = supabase.delete(
+                'score_history',
+                {
+                    'user_id': user_id,
+                    'last_updated': {'gt': date.isoformat()}
+                }
+            )
+
+            if not response.data:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to delete score"
+                )
+
+            return {"message": "Score deleted successfully"}
+
+        except Exception as e:
+            logger.error(f"Failed to delete score: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to delete score: {str(e)}"
+            )

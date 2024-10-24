@@ -168,5 +168,15 @@ class SupabaseClient:
             {'challenge_id': challenge_id}
         )
 
+    def delete_scores_after_date(self, user_id: str, date: str) -> Dict:
+        """Delete scores for a user after a specific date"""
+        return self.delete(
+            'score_history',
+            {
+                'user_id': user_id,
+                'last_updated': {'gt': date}
+            }
+        )
+
 # Create a singleton instance
 supabase = SupabaseClient()
