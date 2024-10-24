@@ -137,12 +137,10 @@ class LeaderboardService:
                 )
 
             # Get updated rank
-            rank_response = supabase.get_user_challenge_rank(
+            new_rank = LeaderboardService._calculate_rank(
                 score_data.challenge_id,
                 score_data.user_id
             )
-
-            new_rank = rank_response.data[0]['rank'] if rank_response.data else None
 
             return ScoreUpdateResponse(
                 success=True,
